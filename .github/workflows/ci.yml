@@ -1,0 +1,54 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: flake8 .
+
+      - name: Run tests
+        run: pytest --maxfail=1 --disable-warnings -q
+
+  docker-deploy:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t crud-products .
+
+      - name: Run container
+        run: |
+          docker run -d -p 8000:8000 --name crud-app crud-products
+          sleep 5
+
+      - name: Verify API is running
+        run: |
+          curl -f http://localhost:8000/products || exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker stop crud-app || true
